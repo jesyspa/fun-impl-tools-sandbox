@@ -3,7 +3,7 @@ import AST.SimpleCPS
 import Parser.Simple
 import PrettyPrinter.Simple
 import PrettyPrinter.SimpleCPS
-import Compilers.CPS as CPS
+import Compiler.CPS as CPS
 import Text.Peggy
 import Control.Monad
 import Bound

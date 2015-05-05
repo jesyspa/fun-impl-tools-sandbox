@@ -1,4 +1,4 @@
-module Compilers.CPS(compile) where
+module Compiler.CPS(compile) where
 
 -- Based on http://jozefg.bitbucket.org/posts/2015-04-30-cps.html
 
