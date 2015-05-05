@@ -37,6 +37,7 @@ primexpr :: AST.Exp String
 
 int :: Int
     = [1-9] [0-9]* { read ($1 : $2) }
+    / "0" { 0 }
 
 var :: String
     = !keyword [a-zA-Z_] [a-zA-Z_0-9]* { $1 : $2 }

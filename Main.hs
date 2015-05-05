@@ -4,6 +4,7 @@ import Parser.Simple
 import PrettyPrinter.Simple
 import PrettyPrinter.SimpleCPS
 import Compiler.CPS as CPS
+import Interpreter.CPS as ICPS
 import Text.Peggy
 import Control.Monad
 import Bound
@@ -20,5 +21,10 @@ compileCPS xs = case closed xs of
                     Just e -> putStrLn . pprintCPS . makeNamesCPS $ CPS.compile e
                     Nothing -> print "error: free variable detected"
 
+runCPS :: Exp String -> IO ()
+runCPS xs = case closed xs of
+                Just e -> print . ICPS.eval . makeNamesCPS $ CPS.compile e
+                Nothing -> print "error: free variable detected"
+
 main :: IO ()
-main = forever $ ifSuccessful compileCPS . parseString top "<stdin>" =<< getLine
+main = forever $ ifSuccessful runCPS . parseString top "<stdin>" =<< getLine
