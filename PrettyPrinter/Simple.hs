@@ -35,7 +35,7 @@ showLambda e = do
 
 pprintPL :: ParenLevel -> Exp Doc -> Gen Int Doc
 pprintPL _ (Var a) = pure a
-pprintPL _ (NumLit n) = int' n
+pprintPL _ (IntLit n) = int' n
 pprintPL l (Lam e) = parensIf (l > None) <$> showLambda e
 pprintPL l (BinOp Plus x y) =  parensIf (l > None) <$> pNone x <*+*> char' '+' <*+*> pprintPL Sum y
 pprintPL l (BinOp Minus x y) =  parensIf (l > None) <$> pNone x <*+*> char' '-' <*+*> pprintPL Sum y

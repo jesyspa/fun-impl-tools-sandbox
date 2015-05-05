@@ -32,10 +32,10 @@ appexpr :: AST.Exp String
 
 primexpr :: AST.Exp String
     = "(" expr ")"
-    / space? num space? { NumLit $2 }
+    / space? int space? { IntLit $2 }
     / space? var space? { Var $2 }
 
-num :: Int
+int :: Int
     = [1-9] [0-9]* { read ($1 : $2) }
 
 var :: String

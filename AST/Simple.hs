@@ -8,7 +8,7 @@ data Op = Plus | Minus | Times | Divide
         deriving (Eq, Ord, Read, Show)
 
 data Exp a = Var a
-           | NumLit Int
+           | IntLit Int
            | Lam (Scope () Exp a)
            | BinOp Op (Exp a) (Exp a)
            | App (Exp a) (Exp a)
@@ -27,7 +27,7 @@ instance Applicative Exp where
 instance Monad Exp where
     return = Var
     (Var a)        >>= f = f a
-    (NumLit n)     >>= _ = NumLit n
+    (IntLit n)     >>= _ = IntLit n
     (Lam e)        >>= f = Lam $ e >>>= f
     (BinOp op x y) >>= f = BinOp op (x >>= f) (y >>= f)
     (App x y)      >>= f = App (x >>= f) (y >>= f)
