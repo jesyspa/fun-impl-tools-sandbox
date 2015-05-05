@@ -7,24 +7,24 @@ import Prelude.Extras
 data Op = Plus | Minus | Times | Divide
         deriving (Eq, Ord, Read, Show)
 
-data AST a = Var a
+data Exp a = Var a
            | NumLit Int
-           | Lam (Scope () AST a)
-           | BinOp Op (AST a) (AST a)
-           | App (AST a) (AST a)
-           | IfZ (AST a) (AST a) (AST a)
+           | Lam (Scope () Exp a)
+           | BinOp Op (Exp a) (Exp a)
+           | App (Exp a) (Exp a)
+           | IfZ (Exp a) (Exp a) (Exp a)
            deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable)
 
-instance Eq1 AST
-instance Ord1 AST
-instance Read1 AST
-instance Show1 AST
+instance Eq1 Exp
+instance Ord1 Exp
+instance Read1 Exp
+instance Show1 Exp
 
-instance Applicative AST where
+instance Applicative Exp where
     pure = Var
     (<*>) = ap
 
-instance Monad AST where
+instance Monad Exp where
     return = Var
     (Var a)        >>= f = f a
     (NumLit n)     >>= _ = NumLit n

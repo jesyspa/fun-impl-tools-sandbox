@@ -3,7 +3,7 @@ module PrettyPrinter.Simple (pprint) where
 import Bound
 import Text.PrettyPrint
 import AST.Simple hiding (App)
-import qualified AST.Simple as AST (AST(App))
+import qualified AST.Simple as AST (Exp(App))
 import Control.Monad.Gen
 import Control.Applicative
 
@@ -25,7 +25,7 @@ text' = pure . text
 int' :: Applicative f => Int -> f Doc
 int' = pure . int
 
-showLambda :: Scope () AST Doc -> Gen Int Doc
+showLambda :: Scope () Exp Doc -> Gen Int Doc
 showLambda e = do
     n <- gen
     let name = text "$x_" <> int n
@@ -33,7 +33,7 @@ showLambda e = do
     body <- pprintPL None e'
     return $ char '\\' <> name <+> text "->" <+> body
 
-pprintPL :: ParenLevel -> AST Doc -> Gen Int Doc
+pprintPL :: ParenLevel -> Exp Doc -> Gen Int Doc
 pprintPL _ (Var a) = pure a
 pprintPL _ (NumLit n) = int' n
 pprintPL l (Lam e) = parensIf (l > None) <$> showLambda e
@@ -44,9 +44,9 @@ pprintPL l (BinOp Divide x y) = parensIf (l > Sum) <$> pprintPL Sum x <*+*> char
 pprintPL l (AST.App x y) = parensIf (l > Mul) <$> pprintPL Mul x <*+*> pprintPL App y
 pprintPL l (IfZ x y z) = parensIf (l > None) <$> text' "if" <*+*> pNone x <*+*> text' "then" <*+*> pNone y <*+*> text' "else" <*+*> pNone z
 
-pNone :: AST Doc -> Gen Int Doc
+pNone :: Exp Doc -> Gen Int Doc
 pNone = pprintPL None
 
-pprint :: AST String -> String
+pprint :: Exp String -> String
 pprint x = render . runGen . pNone $ text <$> x
 

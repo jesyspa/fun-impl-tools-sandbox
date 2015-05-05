@@ -1,35 +1,36 @@
 {-# OPTIONS_GHC -fno-warn-unused-do-bind -fno-warn-name-shadowing -fno-warn-unused-binds -fno-warn-unused-matches #-}
 module Parser.Simple (top) where
 
-import AST.Simple
+-- Need to explicitly qualify Exp to avoid TH problems
+import AST.Simple as AST
 import Text.Peggy
 import Bound
+import Data.List (foldl')
 
 chainl :: a -> [b] -> (a -> b -> a) -> a
-chainl e (x:xs) f = chainl (f e x) xs f
-chainl e [] _ = e
+chainl e xs f = foldl' f e xs
 
 [peggy|
-top :: AST String = expr !.
+top :: AST.Exp String = expr !.
 
-expr :: AST String
+expr :: AST.Exp String
     = bigexpr
     / sumexpr
 
-bigexpr :: AST String
+bigexpr :: AST.Exp String
     = "if" expr "then" expr "else" expr { IfZ $1 $2 $3 }
     / "\\" var "->" expr { Lam (abstract1 $1 $2) }
 
-sumexpr :: AST String
+sumexpr :: AST.Exp String
     = mulexpr (sumop mulexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
 
-mulexpr :: AST String
+mulexpr :: AST.Exp String
     = appexpr (mulop appexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
 
-appexpr :: AST String
+appexpr :: AST.Exp String
     = primexpr (primexpr)* { chainl $1 $2 App }
 
-primexpr :: AST String
+primexpr :: AST.Exp String
     = "(" expr ")"
     / space? num space? { NumLit $2 }
     / space? var space? { Var $2 }
