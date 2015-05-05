@@ -1,0 +1,15 @@
+# directories
+dist/
+.cabal-sandbox
+
+# files
+main
+cabal.sandbox.config
+
+# file formats
+*.hi
+*.hic
+*.o
+*.pdf
+.*.swp
+*.pyc
