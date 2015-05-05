@@ -10,7 +10,7 @@ cabal-version: >= 1.22
 
 executable main
   main-is: Main.hs
-  build-depends: base, peggy, mtl, bound, prelude-extras, pretty
+  build-depends: base, peggy, mtl, bound, prelude-extras, pretty, monad-gen
   hs-source-dirs: .
   ghc-options: -Wall
   default-language: Haskell2010

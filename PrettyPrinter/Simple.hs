@@ -1,11 +1,10 @@
 module PrettyPrinter.Simple (pprint) where
 
 import Bound
-import Control.Monad.State (evalState)
 import Text.PrettyPrint
 import AST.Simple hiding (App)
 import qualified AST.Simple as AST (AST(App))
-import Tools.Gen
+import Control.Monad.Gen
 import Control.Applicative
 
 data ParenLevel = None | Sum | Mul | App
@@ -28,7 +27,7 @@ int' = pure . int
 
 showLambda :: Scope () AST Doc -> Gen Int Doc
 showLambda e = do
-    n <- fresh
+    n <- gen
     let name = text "$x_" <> int n
         e' = instantiate1 (Var name) e
     body <- pprintPL None e'
@@ -49,5 +48,5 @@ pNone :: AST Doc -> Gen Int Doc
 pNone = pprintPL None
 
 pprint :: AST String -> String
-pprint x = render $ evalState (pNone $ text <$> x) 0
+pprint x = render . runGen . pNone $ text <$> x
 
