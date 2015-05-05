@@ -14,17 +14,17 @@ top :: AST String = expr !.
 
 expr :: AST String
     = bigexpr
-    / mulexpr
+    / sumexpr
 
 bigexpr :: AST String
     = "if" expr "then" expr "else" expr { IfZ $1 $2 $3 }
     / "\\" var "->" expr { Lam (abstract1 $1 $2) }
 
-mulexpr :: AST String
-    = sumexpr (mulop sumexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
-
 sumexpr :: AST String
-    = appexpr (sumop appexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
+    = mulexpr (sumop mulexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
+
+mulexpr :: AST String
+    = appexpr (mulop appexpr)* { chainl $1 $2 (\x (op, y) -> BinOp op x y) }
 
 appexpr :: AST String
     = primexpr (primexpr)* { chainl $1 $2 App }
@@ -38,7 +38,7 @@ num :: Int
     = [1-9] [0-9]* { read ($1 : $2) }
 
 var :: String
-    = [a-zA-Z_] [a-zA-Z_0-9]* { $1 : $2 }
+    = !keyword [a-zA-Z_] [a-zA-Z_0-9]* { $1 : $2 }
 
 mulop :: Op
     = "*" { Times }
@@ -47,4 +47,9 @@ mulop :: Op
 sumop :: Op
     = "+" { Plus }
     / "-" { Minus }
+
+keyword :: ()
+    = "if"
+    / "then"
+    / "else"
 |]
