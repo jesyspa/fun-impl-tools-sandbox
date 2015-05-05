@@ -15,4 +15,4 @@ executable main
   ghc-options: -Wall
   default-language: Haskell2010
   default-extensions: TemplateHaskell, DeriveFunctor, DeriveFoldable,
-    DeriveTraversable, QuasiQuotes, FlexibleContexts
+    DeriveTraversable, QuasiQuotes, FlexibleContexts, GeneralizedNewtypeDeriving
