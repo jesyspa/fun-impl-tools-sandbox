@@ -2,6 +2,8 @@
 module GraphReductionLang where
 
 import qualified Data.Map as M
+import Control.Monad.ST
+import Data.STRef
 
 data PrimOp = Add
             | Sub
@@ -19,52 +21,84 @@ data Inst a = PushLit Int
 
 data Cmd a = Prog a
            | Prim PrimOp
-           deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable)
 
 infixl `App`
 
-data DAG a = Cmd (Cmd a)
-           | Literal Int
-           | App (DAG a) (DAG a)
-           deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable)
+data DAG s a = Cmd (Cmd a)
+             | Literal Int
+             | App (DAGRef s a) (DAGRef s a)
 
-unroll' :: DAG a -> [DAG a] -> (Cmd a, [DAG a])
-unroll' (Cmd a) xs = (a, xs)
+type DAGRef s a = STRef s (DAG s a)
+
+unroll' :: DAG s a -> [DAGRef s a] -> ST s (Cmd a, [DAGRef s a])
+unroll' (Cmd a) xs = return (a, xs)
 unroll' (Literal _) _ = error "Cannot apply literal"
-unroll' (App l r) xs = unroll' l (r:xs)
+unroll' (App l r) xs = do
+    l' <- readSTRef l
+    unroll' l' (r:xs)
 
-unroll :: DAG a -> (Cmd a, [DAG a])
-unroll dag = unroll' dag []
+unroll :: [DAGRef s a] -> ST s (Cmd a, [DAGRef s a])
+unroll (x:xs) = do
+    x' <- readSTRef x
+    unroll' x' xs
 
-roll :: [DAG a] -> DAG a
-roll = foldl1 App
+run' :: Show a => Inst a -> [DAGRef s a] -> ST s [DAGRef s a]
+run' (PushLit i) spn = do
+    i' <- newSTRef (Literal i)
+    return $ i' : spn
+run' (PushArg i) spn = return $ (spn !! i) : spn
+run' (PushPrg a) spn = do
+    a' <- newSTRef $ Cmd (Prog a)
+    return $ a' : spn
+run' (PushPrim p) spn = do
+    p' <- newSTRef $ Cmd (Prim p)
+    return $ p' : spn
+run' MkApp (x:y:spn) = do
+    a <- newSTRef (App x y)
+    return $ a : spn
+run' Slide (x:_:spn) = return $ x : spn
+run' op spn = error $ "cannot apply " ++ show op
 
-run' :: Show a => Inst a -> [DAG a] -> [DAG a]
-run' (PushLit i) spn = Literal i : spn
-run' (PushArg i) spn = (spn !! i) : spn
-run' (PushPrg a) spn = Cmd (Prog a) : spn
-run' (PushPrim p) spn = Cmd (Prim p) : spn
-run' MkApp (x:y:spn) = App x y : spn
-run' Slide (x:_:spn) = x : spn
-run' op spn = error $ "cannot apply " ++ show op ++ " when stack is " ++ show spn
+run :: Show a => [Inst a] -> [DAGRef s a] -> ST s [DAGRef s a]
+run is spn = foldl (>>=) (return spn) $ map run' is
 
-run :: Show a => [Inst a] -> [DAG a] -> [DAG a]
-run is spn = foldl (\r i -> run' i r) spn is
+runPrim :: (Show a, Ord a) => M.Map a [Inst a] -> PrimOp -> [DAGRef s a] -> ST s [DAGRef s a]
+runPrim st Add (x:y:spn) = do
+    x' <- eval st [x]
+    y' <- eval st [y]
+    i <- newSTRef (Literal $ x' + y')
+    return $ i : spn
+runPrim st Sub (x:y:spn) = do
+    x' <- eval st [x]
+    y' <- eval st [y]
+    i <- newSTRef (Literal $ x' - y')
+    return $ i : spn
+runPrim st Eq (x:y:spn) = do
+    x' <- eval st [x]
+    y' <- eval st [y]
+    i <- newSTRef $ if x' == y' then Literal 1 else Literal 0
+    return $ i : spn
+runPrim st Branch (x:y:z:spn) = do
+    x' <- eval st [x]
+    return $ if x' /= 0 then y : spn else z : spn
+runPrim _ p spn = error $ "cannot apply " ++ show p
 
-runPrim :: (Show a, Ord a) => M.Map a [Inst a] -> PrimOp -> [DAG a] -> [DAG a]
-runPrim st Add (x:y:spn) = Literal (eval st x + eval st y) : spn
-runPrim st Sub (x:y:spn) = Literal (eval st x - eval st y) : spn
-runPrim st Eq (x:y:spn) = if eval st x == eval st y then Literal 1 : spn else Literal 0 : spn
-runPrim st Branch (x:y:z:spn) = if eval st x /= 0 then y : spn else z : spn
-runPrim _ p spn = error $ "cannot apply " ++ show p ++ " when stack is " ++ show spn
+eval' :: (Show a, Ord a) => M.Map a [Inst a] -> [DAGRef s a] -> Cmd a -> ST s [DAGRef s a]
+eval' st spn (Prog a) = run (st M.! a) spn
+eval' st spn (Prim p) = runPrim st p spn
 
-eval' :: (Show a, Ord a) => M.Map a [Inst a] -> [DAG a] -> Cmd a -> DAG a
-eval' st spn (Prog a) = roll $ run (st M.! a) spn
-eval' st spn (Prim p) = roll $ runPrim st p spn
+eval :: (Show a, Ord a) => M.Map a [Inst a] -> [DAGRef s a] -> ST s Int
+eval st dag = do
+    x <- readSTRef (head dag)
+    case x of
+        Literal i -> return i
+        _ -> do
+            (a, spn) <- unroll dag
+            spn' <- eval' st spn a
+            eval st spn'
 
-eval :: (Show a, Ord a) => M.Map a [Inst a] -> DAG a -> Int
-eval st (Literal i) = i
-eval st dag = eval st $ eval' st spn a
-    where (a, spn) = unroll dag
-
+evaluate :: M.Map String [Inst String] -> Int
+evaluate st = runST $ do
+    r <- newSTRef (Cmd (Prog "main"))
+    eval st [r]
 
