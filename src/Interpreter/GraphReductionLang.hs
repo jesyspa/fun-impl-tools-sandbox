@@ -4,17 +4,7 @@ import qualified Data.Map as M
 import Data.IORef
 import Control.Monad.Reader
 import AST.GraphInst
-
-data Cmd a = Prog a
-           | Prim PrimOp
-
-infixl `App`
-
-data DAG a = Cmd (Cmd a)
-           | Literal Int
-           | App (DAGRef a) (DAGRef a)
-
-type DAGRef a = IORef (DAG a)
+import Interpreter.DAG
 
 type SymbolsReaderT a = ReaderT (M.Map a [Inst a])
 
@@ -31,22 +21,25 @@ unroll (x:xs) = do
     unroll' x' xs
 unroll [] = error "empty spine"
 
+push :: DAG a -> [DAGRef a] -> IO [DAGRef a]
+push dag xs = (:xs) <$> newIORef dag
+
+reportError :: Show a => String -> [DAGRef a] -> IO b
+reportError op spn = do
+    xs <- mapM (readIORef >=> printDAG) spn
+    putStrLn $ "invalid application of " ++ op
+    putStrLn "Spine:"
+    forM_ xs putStrLn
+    error "fatal error"
+
 run' :: Show a => Inst a -> [DAGRef a] -> IO [DAGRef a]
-run' (PushLit i) spn = do
-    i' <- newIORef (Literal i)
-    return $ i' : spn
+run' (PushLit i) spn = push (Literal i) spn
 run' (PushArg i) spn = return $ (spn !! i) : spn
-run' (PushPrg a) spn = do
-    a' <- newIORef $ Cmd (Prog a)
-    return $ a' : spn
-run' (PushPrim p) spn = do
-    p' <- newIORef $ Cmd (Prim p)
-    return $ p' : spn
-run' MkApp (x:y:spn) = do
-    a <- newIORef (App x y)
-    return $ a : spn
+run' (PushPrg a) spn = push (Cmd $ Prog a) spn
+run' (PushPrim p) spn = push (Cmd $ Prim p) spn
+run' MkApp (x:y:spn) = push (App x y) spn
 run' Slide (x:_:spn) = return $ x : spn
-run' op _ = error $ "cannot apply " ++ show op
+run' op spn = reportError (show op) spn
 
 run :: Show a => [Inst a] -> [DAGRef a] -> IO [DAGRef a]
 run is spn = foldl (>>=) (return spn) $ map run' is
@@ -81,21 +74,25 @@ runPrim Print (x:spn) = do
 runPrim Bind (x:y:spn) = do
     _ <- evalUpdate x
     return $ y:x:spn
-runPrim p _ = error $ "cannot apply " ++ show p
+runPrim op spn = lift $ reportError (show op) spn
 
 eval' :: (Show a, Ord a) => [DAGRef a] -> Cmd a -> SymbolsReaderT a IO [DAGRef a]
 eval' spn (Prog a) = ask >>= \st -> lift $ run (st M.! a) spn
 eval' spn (Prim p) = runPrim p spn
 
+evalExec :: (Show a, Ord a) => [DAGRef a] -> SymbolsReaderT a IO Int
+evalExec dag = do
+    (a, spn) <- lift $ unroll dag
+    spn' <- eval' spn a
+    eval spn'
+
 eval :: (Show a, Ord a) => [DAGRef a] -> SymbolsReaderT a IO Int
-eval dag = do
-    x <- lift $ readIORef (head dag)
-    case x of
+eval [x] = do
+    x' <- lift $ readIORef x
+    case x' of
         Literal i -> return i
-        _ -> do
-            (a, spn) <- lift $ unroll dag
-            spn' <- eval' spn a
-            eval spn'
+        _ -> evalExec [x]
+eval spn = evalExec spn
 
 evalUpdate :: (Show a, Ord a) => DAGRef a -> SymbolsReaderT a IO Int
 evalUpdate dag = do
