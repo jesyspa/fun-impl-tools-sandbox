@@ -64,22 +64,22 @@ run is spn = foldl (>>=) (return spn) $ map run' is
 
 runPrim :: (Show a, Ord a) => M.Map a [Inst a] -> PrimOp -> [DAGRef s a] -> ST s [DAGRef s a]
 runPrim st Add (x:y:spn) = do
-    x' <- eval st [x]
-    y' <- eval st [y]
+    x' <- evalUpdate st x
+    y' <- evalUpdate st y
     i <- newSTRef (Literal $ x' + y')
     return $ i : spn
 runPrim st Sub (x:y:spn) = do
-    x' <- eval st [x]
-    y' <- eval st [y]
+    x' <- evalUpdate st x
+    y' <- evalUpdate st y
     i <- newSTRef (Literal $ x' - y')
     return $ i : spn
 runPrim st Eq (x:y:spn) = do
-    x' <- eval st [x]
-    y' <- eval st [y]
+    x' <- evalUpdate st x
+    y' <- evalUpdate st y
     i <- newSTRef $ if x' == y' then Literal 1 else Literal 0
     return $ i : spn
 runPrim st Branch (x:y:z:spn) = do
-    x' <- eval st [x]
+    x' <- evalUpdate st x
     return $ if x' /= 0 then y : spn else z : spn
 runPrim _ p spn = error $ "cannot apply " ++ show p
 
@@ -97,8 +97,14 @@ eval st dag = do
             spn' <- eval' st spn a
             eval st spn'
 
-evaluate :: M.Map String [Inst String] -> Int
-evaluate st = runST $ do
-    r <- newSTRef (Cmd (Prog "main"))
-    eval st [r]
+evalUpdate :: (Show a, Ord a) => M.Map a [Inst a] -> DAGRef s a -> ST s Int
+evalUpdate st dag = do
+    x <- eval st [dag]
+    writeSTRef dag (Literal x)
+    return x
+
+evaluate :: M.Map String [Inst String] -> String -> Int
+evaluate st entry = runST $ do
+    r <- newSTRef (Cmd (Prog entry))
+    evalUpdate st r
 
