@@ -1,7 +1,7 @@
 -- vim: set textwidth=80:
 name: fun-tools
 version: 0.0.1
-synopsis: Some assorted code to make 
+synopsis: Some assorted fun with functional language compilation
 license: PublicDomain
 author: Anton Golov
 stability: nonexistent
@@ -10,10 +10,9 @@ cabal-version: >= 1.22
 
 executable main
   main-is: Main.hs
-  build-depends: base, peggy, mtl, bound, prelude-extras, pretty, monad-gen,
-    containers
-  hs-source-dirs: .
+  build-depends: base, mtl, parsec, pretty, monad-gen, containers
+  hs-source-dirs: src/
   ghc-options: -Wall
   default-language: Haskell2010
-  default-extensions: TemplateHaskell, DeriveFunctor, DeriveFoldable,
-    DeriveTraversable, QuasiQuotes, FlexibleContexts, GeneralizedNewtypeDeriving
+  default-extensions: DeriveFunctor, DeriveFoldable,
+    DeriveTraversable, FlexibleContexts, GeneralizedNewtypeDeriving
