@@ -1,5 +1,6 @@
 module Interpreter.DAG where
 
+import Control.Monad.Trans
 import Data.IORef
 import AST.GraphInst
 
@@ -15,10 +16,10 @@ data DAG a = Cmd (Cmd a)
 
 type DAGRef a = IORef (DAG a)
 
-printDAG :: Show a => DAG a -> IO String
+printDAG :: (MonadIO m, Show a) => DAG a -> m String
 printDAG (Cmd cmd) = return $ show cmd
 printDAG (Literal i) = return $ show i
 printDAG (App l r) = do
-    l' <- readIORef l >>= printDAG
-    r' <- readIORef r >>= printDAG
+    l' <- liftIO (readIORef l) >>= printDAG
+    r' <- liftIO (readIORef r) >>= printDAG
     return $ "(" ++ l' ++ " " ++ r' ++ ")"

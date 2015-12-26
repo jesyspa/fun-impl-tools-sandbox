@@ -14,5 +14,5 @@ executable main
   hs-source-dirs: src/
   ghc-options: -Wall
   default-language: Haskell2010
-  default-extensions: DeriveFunctor, DeriveFoldable,
+  default-extensions: DeriveFunctor, DeriveFoldable, ConstraintKinds,
     DeriveTraversable, FlexibleContexts, GeneralizedNewtypeDeriving
