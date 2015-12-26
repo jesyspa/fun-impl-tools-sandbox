@@ -9,6 +9,9 @@ data PrimOp = Add
             | Sub
             | Eq
             | Branch
+            | Read
+            | Print
+            | Bind
             deriving (Eq, Ord, Read, Show)
 
 data Inst a = PushLit Int
@@ -83,6 +86,17 @@ runPrim Eq (x:y:spn) = do
 runPrim Branch (x:y:z:spn) = do
     x' <- evalUpdate x
     return $ if x' /= 0 then y : spn else z : spn
+runPrim Read spn = do
+    x <- lift $ readLn
+    x' <- lift $ newIORef (Literal x)
+    return $ x' : spn
+runPrim Print (x:spn) = do
+    x' <- evalUpdate x
+    lift $ print x'
+    return $ x : spn
+runPrim Bind (x:y:spn) = do
+    _ <- evalUpdate x
+    return $ y:x:spn
 runPrim p spn = error $ "cannot apply " ++ show p
 
 eval' :: (Show a, Ord a) => [DAGRef a] -> Cmd a -> SymbolsReaderT a IO [DAGRef a]
@@ -109,5 +123,8 @@ evaluate :: M.Map String [Inst String] -> String -> IO Int
 evaluate st entry = flip runReaderT st $ do
     r <- lift $ newIORef (Cmd (Prog entry))
     evalUpdate r
+
+evaluate' :: [Inst String] -> IO Int
+evaluate' xs = evaluate (M.fromList [("main", xs)]) "main"
 
 testCode = [PushLit 1, PushLit 1, PushPrim Add, MkApp, MkApp] ++ concat (replicate 20 [PushArg 0, PushArg 1, PushPrim Add, MkApp, MkApp])
