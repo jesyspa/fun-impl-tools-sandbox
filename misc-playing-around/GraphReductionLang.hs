@@ -2,8 +2,8 @@
 module GraphReductionLang where
 
 import qualified Data.Map as M
-import Control.Monad.ST
-import Data.STRef
+import Data.IORef
+import Control.Monad.Reader
 
 data PrimOp = Add
             | Sub
@@ -24,87 +24,90 @@ data Cmd a = Prog a
 
 infixl `App`
 
-data DAG s a = Cmd (Cmd a)
-             | Literal Int
-             | App (DAGRef s a) (DAGRef s a)
+data DAG a = Cmd (Cmd a)
+           | Literal Int
+           | App (DAGRef a) (DAGRef a)
 
-type DAGRef s a = STRef s (DAG s a)
+type DAGRef a = IORef (DAG a)
 
-unroll' :: DAG s a -> [DAGRef s a] -> ST s (Cmd a, [DAGRef s a])
+type SymbolsReaderT a = ReaderT (M.Map a [Inst a])
+
+unroll' :: DAG a -> [DAGRef a] -> IO (Cmd a, [DAGRef a])
 unroll' (Cmd a) xs = return (a, xs)
 unroll' (Literal _) _ = error "Cannot apply literal"
 unroll' (App l r) xs = do
-    l' <- readSTRef l
+    l' <- readIORef l
     unroll' l' (r:xs)
 
-unroll :: [DAGRef s a] -> ST s (Cmd a, [DAGRef s a])
+unroll :: [DAGRef a] -> IO (Cmd a, [DAGRef a])
 unroll (x:xs) = do
-    x' <- readSTRef x
+    x' <- readIORef x
     unroll' x' xs
 
-run' :: Show a => Inst a -> [DAGRef s a] -> ST s [DAGRef s a]
+run' :: Show a => Inst a -> [DAGRef a] -> IO [DAGRef a]
 run' (PushLit i) spn = do
-    i' <- newSTRef (Literal i)
+    i' <- newIORef (Literal i)
     return $ i' : spn
 run' (PushArg i) spn = return $ (spn !! i) : spn
 run' (PushPrg a) spn = do
-    a' <- newSTRef $ Cmd (Prog a)
+    a' <- newIORef $ Cmd (Prog a)
     return $ a' : spn
 run' (PushPrim p) spn = do
-    p' <- newSTRef $ Cmd (Prim p)
+    p' <- newIORef $ Cmd (Prim p)
     return $ p' : spn
 run' MkApp (x:y:spn) = do
-    a <- newSTRef (App x y)
+    a <- newIORef (App x y)
     return $ a : spn
 run' Slide (x:_:spn) = return $ x : spn
 run' op spn = error $ "cannot apply " ++ show op
 
-run :: Show a => [Inst a] -> [DAGRef s a] -> ST s [DAGRef s a]
+run :: Show a => [Inst a] -> [DAGRef a] -> IO [DAGRef a]
 run is spn = foldl (>>=) (return spn) $ map run' is
 
-runPrim :: (Show a, Ord a) => M.Map a [Inst a] -> PrimOp -> [DAGRef s a] -> ST s [DAGRef s a]
-runPrim st Add (x:y:spn) = do
-    x' <- evalUpdate st x
-    y' <- evalUpdate st y
-    i <- newSTRef (Literal $ x' + y')
+runPrim :: (Show a, Ord a) => PrimOp -> [DAGRef a] -> SymbolsReaderT a IO [DAGRef a]
+runPrim Add (x:y:spn) = do
+    x' <- evalUpdate x
+    y' <- evalUpdate y
+    i <- lift $ newIORef (Literal $ x' + y')
     return $ i : spn
-runPrim st Sub (x:y:spn) = do
-    x' <- evalUpdate st x
-    y' <- evalUpdate st y
-    i <- newSTRef (Literal $ x' - y')
+runPrim Sub (x:y:spn) = do
+    x' <- evalUpdate x
+    y' <- evalUpdate y
+    i <- lift $ newIORef (Literal $ x' - y')
     return $ i : spn
-runPrim st Eq (x:y:spn) = do
-    x' <- evalUpdate st x
-    y' <- evalUpdate st y
-    i <- newSTRef $ if x' == y' then Literal 1 else Literal 0
+runPrim Eq (x:y:spn) = do
+    x' <- evalUpdate x
+    y' <- evalUpdate y
+    i <- lift $ newIORef $ if x' == y' then Literal 1 else Literal 0
     return $ i : spn
-runPrim st Branch (x:y:z:spn) = do
-    x' <- evalUpdate st x
+runPrim Branch (x:y:z:spn) = do
+    x' <- evalUpdate x
     return $ if x' /= 0 then y : spn else z : spn
-runPrim _ p spn = error $ "cannot apply " ++ show p
+runPrim p spn = error $ "cannot apply " ++ show p
 
-eval' :: (Show a, Ord a) => M.Map a [Inst a] -> [DAGRef s a] -> Cmd a -> ST s [DAGRef s a]
-eval' st spn (Prog a) = run (st M.! a) spn
-eval' st spn (Prim p) = runPrim st p spn
+eval' :: (Show a, Ord a) => [DAGRef a] -> Cmd a -> SymbolsReaderT a IO [DAGRef a]
+eval' spn (Prog a) = ask >>= \st -> lift $ run (st M.! a) spn
+eval' spn (Prim p) = runPrim p spn
 
-eval :: (Show a, Ord a) => M.Map a [Inst a] -> [DAGRef s a] -> ST s Int
-eval st dag = do
-    x <- readSTRef (head dag)
+eval :: (Show a, Ord a) => [DAGRef a] -> SymbolsReaderT a IO Int
+eval dag = do
+    x <- lift $ readIORef (head dag)
     case x of
         Literal i -> return i
         _ -> do
-            (a, spn) <- unroll dag
-            spn' <- eval' st spn a
-            eval st spn'
+            (a, spn) <- lift $ unroll dag
+            spn' <- eval' spn a
+            eval spn'
 
-evalUpdate :: (Show a, Ord a) => M.Map a [Inst a] -> DAGRef s a -> ST s Int
-evalUpdate st dag = do
-    x <- eval st [dag]
-    writeSTRef dag (Literal x)
+evalUpdate :: (Show a, Ord a) => DAGRef a -> SymbolsReaderT a IO Int
+evalUpdate dag = do
+    x <- eval [dag]
+    lift $ writeIORef dag (Literal x)
     return x
 
-evaluate :: M.Map String [Inst String] -> String -> Int
-evaluate st entry = runST $ do
-    r <- newSTRef (Cmd (Prog entry))
-    evalUpdate st r
+evaluate :: M.Map String [Inst String] -> String -> IO Int
+evaluate st entry = flip runReaderT st $ do
+    r <- lift $ newIORef (Cmd (Prog entry))
+    evalUpdate r
 
+testCode = [PushLit 1, PushLit 1, PushPrim Add, MkApp, MkApp] ++ concat (replicate 20 [PushArg 0, PushArg 1, PushPrim Add, MkApp, MkApp])
