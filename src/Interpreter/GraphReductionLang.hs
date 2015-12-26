@@ -1,26 +1,9 @@
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-module GraphReductionLang where
+module Interpreter.GraphReductionLang where
 
 import qualified Data.Map as M
 import Data.IORef
 import Control.Monad.Reader
-
-data PrimOp = Add
-            | Sub
-            | Eq
-            | Branch
-            | Read
-            | Print
-            | Bind
-            deriving (Eq, Ord, Read, Show)
-
-data Inst a = PushLit Int
-            | PushArg Int
-            | PushPrg a
-            | PushPrim PrimOp
-            | MkApp
-            | Slide
-            deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable)
+import AST.GraphInst
 
 data Cmd a = Prog a
            | Prim PrimOp
@@ -37,7 +20,7 @@ type SymbolsReaderT a = ReaderT (M.Map a [Inst a])
 
 unroll' :: DAG a -> [DAGRef a] -> IO (Cmd a, [DAGRef a])
 unroll' (Cmd a) xs = return (a, xs)
-unroll' (Literal _) _ = error "Cannot apply literal"
+unroll' (Literal _) _ = error "cannot apply literal"
 unroll' (App l r) xs = do
     l' <- readIORef l
     unroll' l' (r:xs)
@@ -46,6 +29,7 @@ unroll :: [DAGRef a] -> IO (Cmd a, [DAGRef a])
 unroll (x:xs) = do
     x' <- readIORef x
     unroll' x' xs
+unroll [] = error "empty spine"
 
 run' :: Show a => Inst a -> [DAGRef a] -> IO [DAGRef a]
 run' (PushLit i) spn = do
@@ -62,7 +46,7 @@ run' MkApp (x:y:spn) = do
     a <- newIORef (App x y)
     return $ a : spn
 run' Slide (x:_:spn) = return $ x : spn
-run' op spn = error $ "cannot apply " ++ show op
+run' op _ = error $ "cannot apply " ++ show op
 
 run :: Show a => [Inst a] -> [DAGRef a] -> IO [DAGRef a]
 run is spn = foldl (>>=) (return spn) $ map run' is
@@ -97,7 +81,7 @@ runPrim Print (x:spn) = do
 runPrim Bind (x:y:spn) = do
     _ <- evalUpdate x
     return $ y:x:spn
-runPrim p spn = error $ "cannot apply " ++ show p
+runPrim p _ = error $ "cannot apply " ++ show p
 
 eval' :: (Show a, Ord a) => [DAGRef a] -> Cmd a -> SymbolsReaderT a IO [DAGRef a]
 eval' spn (Prog a) = ask >>= \st -> lift $ run (st M.! a) spn
